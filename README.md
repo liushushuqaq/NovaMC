@@ -14,6 +14,7 @@
 | 实例管理 | 创建 / 重命名 / 删除；游戏版本只能从**本机已安装**的版本里选；每实例独立的存档、模组、Java、内存、分辨率与启动参数 |
 | 启动 | 合并 `inheritsFrom` 链、按 rules 求值展开 `arguments.game/jvm`、组装 classpath 与 `${}` 变量，子进程管理与崩溃日志摘要；启动前校验 jar 与依赖库，损坏自动补 |
 | Fabric | 通过 fabricmc meta 拉取 profile 并落盘，与父版本合并启动；官方源 + BMCLAPI 双源回退 |
+| Forge / NeoForge | 完整安装链：下载 installer → 解析 `install_profile.json` → 下载依赖库 → 执行 processor（解包、BinaryPatch 补丁）→ 产出可启动 jar；BMCLAPI 镜像优先 + 官方源兜底，并发竞速 + 多轮重试 |
 | 模组依赖 | 启动前扫 `mods/*.jar` 读 `fabric.mod.json`（含 JiJ 内嵌依赖），比对 `depends` 找出缺失前置；Modrinth 匹配当前游戏版本 + Fabric 后可一键补齐；版本范围对不上时明确提示而不是硬装 |
 | 整合包 | Modrinth 搜索 + `.mrpack` 安装（index 解析、文件下载、overrides 覆盖），自动装 Fabric；支持本地 zip 导入（CurseForge / Modrinth / 裸 `.minecraft`），缺版本自动下载 |
 | 账号 | 离线账号（UUID v3 与 Java 端一致）、多账号切换。**微软登录按计划推迟** |
@@ -27,8 +28,7 @@
 ## 未实现（刻意留白）
 
 - **微软登录**：OAuth 设备码 → Xbox Live → XSTS → Minecraft Services。`Account.type` 与令牌字段已预留，接入时不需要改数据模型。
-- **Forge / NeoForge**：需要解析 `install_profile.json` 并执行 processor，复杂度远高于 Fabric，建议放到 M3。
-- **CurseForge**：需要 API Key 与合规授权，当前只接 Modrinth。
+- **CurseForge 在线搜索/下载**：需要 API Key 与合规授权，当前只接 Modrinth；本地 CurseForge 整合包 zip 导入不受影响。
 
 ## 快速开始
 
