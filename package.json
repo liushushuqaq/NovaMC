@@ -1,0 +1,85 @@
+{
+  "name": "novamc",
+  "version": "0.0.2",
+  "description": "NovaMC — a Minecraft launcher for Windows / macOS / Linux",
+  "main": "./out/main/index.js",
+  "author": "NovaMC",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "icon": "electron scripts/make-icon.js",
+    "package:win": "npm run build && node scripts/pack.js win",
+    "package:mac": "npm run build && node scripts/pack.js mac",
+    "package:linux": "npm run build && node scripts/pack.js linux"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/node": "^22.10.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.3",
+    "vite": "^5.4.11",
+    "zustand": "^5.0.3"
+  },
+  "build": {
+    "appId": "dev.novamc.launcher",
+    "productName": "NovaMC",
+    "copyright": "Copyright © 2026 NovaMC",
+    "asar": true,
+    "npmRebuild": false,
+    "files": [
+      "out/**/*",
+      "resources/frpc/frpc.exe",
+      "resources/frpc-sakura/frpc.exe",
+      "package.json"
+    ],
+    "extraResources": [],
+    "asarUnpack": [
+      "resources/frpc/frpc.exe",
+      "resources/frpc-sakura/frpc.exe"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": ".build"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "artifactName": "NovaMC-${version}.exe",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.games"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game"
+    },
+    "afterAllArtifactBuild": "scripts/after-build.js"
+  }
+}

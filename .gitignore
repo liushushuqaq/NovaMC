@@ -1,0 +1,30 @@
+node_modules/
+out/
+dist/
+release/
+*.log
+.smoke*/
+assets/qa/
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+
+# 打包产物：NovaMC/<产品名>-<版本>/ 是交付目录，.build/ 是 electron-builder 的中间产物
+NovaMC/
+.build/
+.build-*/
+
+# 视觉验收用的临时截图与测试用户目录
+.qa/
+.mini/
+
+# 内网穿透所需的 frpc 二进制（第三方开源，体积大，不随源码提交，见 README「获取 frpc」）
+resources/frpc/frpc.exe
+resources/frpc-sakura/frpc.exe
+
+# 工作区内部数据
+.workbuddy/
+
+# 环境变量与密钥（切勿提交）
+.env
+.env.*
