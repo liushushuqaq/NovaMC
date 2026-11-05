@@ -1114,7 +1114,6 @@ function PrivacySection({
   patch(p: Partial<AppConfig>): void
 }): ReactElement {
   const crash = config.crashReport ?? { enabled: false, endpoint: '' }
-  const ai = config.aiDiagnosis ?? { enabled: false, baseUrl: '', apiKey: '', model: 'deepseek-chat' }
 
   return (
     <>
@@ -1144,31 +1143,10 @@ function PrivacySection({
         </div>
       </Card>
 
-      <Card title="AI 崩溃诊断" hint="默认关闭">
-        <div className="set-row">
-          <div className="set-row-label">
-            <b>允许 AI 分析崩溃日志</b>
-            <span>开发模式里点「AI 分析」时，把日志片段发给你自己配置的模型服务</span>
-          </div>
-          <Switch on={ai.enabled} onChange={(v) => patch({ aiDiagnosis: { ...ai, enabled: v } })} />
-        </div>
-        <div className="set-field">
-          <div className="field-head">
-            <span className="d">当前服务</span>
-            <span className="v">{ai.baseUrl || '未配置'}</span>
-          </div>
-          <p className="hint">
-            {ai.baseUrl
-              ? `模型 ${ai.model || '未设置'} · ${ai.apiKey ? 'Key 已保存（仅本机）' : '未填 Key'}`
-              : '在开发模式的控制台诊断面板里填写 Base URL / 模型 / API Key。未配置时只使用本地规则库。'}
-          </p>
-        </div>
-      </Card>
-
       <Card title="隐私说明" tint>
         <div className="set-privacy-note">
           <p>
-            <b>默认全关。</b>不打开上面的开关，启动器不会收集、上传任何崩溃信息，也不会调用任何 AI 服务。
+            <b>默认全关。</b>不打开上面的开关，启动器不会收集、上传任何崩溃信息。
           </p>
           <p>所有配置存在本机 config.json；API Key 不写日志、不进崩溃报告、不显示在公开仓库。</p>
           <p>上报端点由你自己填写，NovaMC 项目方不接收任何数据。</p>

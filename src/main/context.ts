@@ -12,8 +12,8 @@ import { AccountStore } from '../core/auth'
 import { ModrinthService } from '../core/modpack'
 import { PackImporter } from '../core/packImport'
 import { LaunchService } from '../core/launch'
-import { detectJavaRuntimes } from '../core/java'
-import { javaBinCandidates } from '../core/javaProvision'
+import { detectJavaRuntimes, pickJava } from '../core/java'
+import { javaBinCandidates, provisionJava } from '../core/javaProvision'
 import { StorageService } from '../core/storage'
 import { ModDependencyService } from '../core/modDeps'
 import { ForgeService } from '../core/forge'
@@ -98,13 +98,22 @@ export async function createContext(dataRoot: DataRoot): Promise<AppContext> {
   const installer = new Installer(http, pool, paths, versions, mirror, platform)
   const instances = new InstanceStore(paths)
   const accounts = new AccountStore(paths, config)
-  const modrinth = new ModrinthService(http, pool, paths, versions, instances)
+  const forge = new ForgeService(http, pool, paths)
+  const modrinth = new ModrinthService(http, pool, paths, versions, instances, {
+    forge,
+    getJava: async (major: number) => {
+      const cfg = await config.load()
+      const runtimes = await detectJavaRuntimes()
+      const hit = pickJava(runtimes, major, cfg.javaPreference)
+      if (hit) return hit.path
+      return provisionJava(major, paths, pool, http, platform, mirror.mode)
+    }
+  })
   const packs = new PackImporter(http, pool, paths)
   const launcher = new LaunchService()
   const java = new JavaService(paths, config)
   const storage = new StorageService(paths)
   const modDeps = new ModDependencyService(http, pool, paths)
-  const forge = new ForgeService(http, pool, paths)
   const shader = new ShaderService(http, pool, paths)
   const tunnel = new TunnelService(http)
 

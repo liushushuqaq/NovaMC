@@ -168,9 +168,8 @@ export default function App(): ReactElement {
       <div className="titlebar">
         <div className="left">
           <i className="dot" />
-          <span>
-            {PAGES[page].title} — NovaMC
-            {activeAccount ? ` · ${activeAccount.name}` : ''}
+          <span className="titlebar-page">
+            {`${PAGES[page].title} — NovaMC${activeAccount ? ` · ${activeAccount.name}` : ''}`}
           </span>
         </div>
         {isMac ? null : (

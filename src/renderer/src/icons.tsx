@@ -50,6 +50,7 @@ export type IconName =
   | 'lock'
   | 'clock'
   | 'filter'
+  | 'code'
 
 const paths: Record<IconName, ReactElement> = {
   home: <path d="M3 8.6 10 3l7 5.6V16a1 1 0 0 1-1 1h-3.6v-4.6H7.6V17H4a1 1 0 0 1-1-1V8.6Z" />,
@@ -273,7 +274,8 @@ const paths: Record<IconName, ReactElement> = {
       <path d="M10 6v4.2l2.8 1.6" />
     </>
   ),
-  filter: <path d="M3.4 5.4h13.2M5.8 10h8.4M8.2 14.6h3.6" />
+  filter: <path d="M3.4 5.4h13.2M5.8 10h8.4M8.2 14.6h3.6" />,
+  code: <path d="M7 6 3 10l4 4M13 6l4 4-4 4M12.5 4.5l-1 11" />
 }
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {

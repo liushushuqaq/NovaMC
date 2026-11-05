@@ -71,7 +71,8 @@ const api: NovaApi & {
     supports: (id) => invoke('shader:supports', id),
     plan: (id) => invoke('shader:plan', id),
     status: (id) => invoke('shader:status', id),
-    install: (id) => invoke('shader:install', id)
+    install: (id) => invoke('shader:install', id),
+    installLocal: (id) => invoke('shader:installLocal', id)
   },
   tunnel: {
     list: (provider, token) => invoke('tunnel:list', provider, token),

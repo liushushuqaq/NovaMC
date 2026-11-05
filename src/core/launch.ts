@@ -5,7 +5,7 @@ import type { GamePaths, PlatformInfo } from './paths'
 import type { ResolvedVersion } from './types'
 import type { Account, InstanceConfig, JavaRuntimeInfo } from './types'
 import { expandArgs, legacySplit, rulesAllow, substitute, type OsContext } from './rules'
-import { mavenPathOf } from './installer'
+import { mavenPathOf, isForgeStubLibrary } from './installer'
 import { fail } from './errors'
 
 export interface BuildInput {
@@ -126,6 +126,7 @@ export function buildClasspath(resolved: ResolvedVersion, paths: GamePaths, plat
   for (const lib of resolved.libraries) {
     if (!rulesAllow(lib.rules, ctx)) continue
     if (lib.natives) continue // legacy natives 走解压，不进 classpath
+    if (isForgeStubLibrary(lib)) continue // Forge 空壳 client/server 库，不进 classpath
     const p = lib.downloads?.artifact?.path ?? mavenPathOf(lib.name)
     entries.push(paths.library(p))
   }

@@ -45,10 +45,12 @@ export async function provisionJava(
   http: HttpClient,
   platform: PlatformInfo,
   mirrorMode: MirrorMode,
-  onProgress?: (p: ProvisionProgress) => void
+  onProgress?: (p: ProvisionProgress) => void,
+  /** 'jre' 给游戏跑用；'jdk' 给 mod 开发用（Gradle 需要 javac） */
+  imageType: 'jre' | 'jdk' = 'jre'
 ): Promise<string> {
   const existing = await findManagedJava(paths, major)
-  if (existing) {
+  if (existing && imageType === 'jre') {
     onProgress?.({ phase: 'done', label: existing, done: 1, total: 1, doneBytes: 0, totalBytes: 0, speedBps: 0, elapsedMs: 0 })
     return existing
   }
@@ -58,13 +60,13 @@ export async function provisionJava(
   const arch = platform.arch === 'arm64' ? 'aarch64' : 'x64'
 
   onProgress?.({ phase: 'resolve', label: '选择下载源', done: 0, total: 1, doneBytes: 0, totalBytes: 0, speedBps: 0, elapsedMs: 0 })
-  const candidates = await resolveCandidates(http, major, os, arch, mirrorMode)
+  const candidates = await resolveCandidates(http, major, os, arch, mirrorMode, imageType)
   if (!candidates.length) throw fail('E_JAVA_DOWNLOAD', `找不到 Java ${major} 的可用下载源`)
   const primary = candidates[0]
 
   const tmpDir = path.join(paths.root, 'tmp')
   await fs.mkdir(tmpDir, { recursive: true })
-  const archive = path.join(tmpDir, `jre-${major}.bin`)
+  const archive = path.join(tmpDir, `${imageType}-${major}.bin`)
   await fs.rm(archive, { force: true }).catch(() => {})
 
   try {
@@ -75,13 +77,13 @@ export async function provisionJava(
           mirrors: candidates.slice(1).map((c) => c.url),
           dest: archive,
           size: primary.size,
-          label: `Java ${major} 运行时 · ${new URL(primary.url).hostname}`
+          label: `Java ${major} ${imageType === 'jdk' ? '开发工具包' : '运行时'} · ${new URL(primary.url).hostname}`
         }
       ],
       (t) =>
         onProgress?.({
           phase: 'download',
-          label: `Java ${major} 运行时`,
+          label: `Java ${major} ${imageType === 'jdk' ? '开发工具包' : '运行时'}`,
           done: t.doneFiles,
           total: t.totalFiles,
           doneBytes: t.doneBytes,
@@ -106,7 +108,7 @@ export async function provisionJava(
   })
 
   // 先解到暂存目录：中断时不会在 runtime/ 里留下"看着存在、其实是残骸"的目录
-  const staging = path.join(tmpDir, `jre-${major}-x`)
+  const staging = path.join(tmpDir, `${imageType}-${major}-x`)
   await fs.rm(staging, { recursive: true, force: true })
   await fs.mkdir(staging, { recursive: true })
   try {
@@ -115,7 +117,7 @@ export async function provisionJava(
     if (!entries.length) throw new Error('压缩包为空')
     const rootEntry = entries.length === 1 ? entries[0] : null
     const from = rootEntry ? path.join(staging, rootEntry) : staging
-    const dirName = rootEntry ?? `jre-${major}`
+    const dirName = rootEntry ?? `${imageType}-${major}`
     const to = path.join(paths.runtimes, dirName)
     await fs.rm(to, { recursive: true, force: true })
     await fs.mkdir(paths.runtimes, { recursive: true })
@@ -127,7 +129,8 @@ export async function provisionJava(
     await fs.rm(archive, { force: true }).catch(() => {})
   }
 
-  const found = await findManagedJava(paths, major)
+  const found =
+    imageType === 'jdk' ? await findManagedJdk(paths, major) : await findManagedJava(paths, major)
   if (!found) throw fail('E_JAVA_MISSING', '运行时解压后未找到 java 可执行文件')
 
   onProgress?.({ phase: 'done', label: found, done: 1, total: 1, doneBytes: 0, totalBytes: 0, speedBps: 0, elapsedMs: 0 })
@@ -140,21 +143,28 @@ async function resolveCandidates(
   major: number,
   os: string,
   arch: string,
-  mode: MirrorMode
+  mode: MirrorMode,
+  imageType: 'jre' | 'jdk'
 ): Promise<ArchiveCandidate[]> {
   const list: ArchiveCandidate[] = []
   if (mode !== 'official') {
-    for (const item of await listTuna(http, major, os, arch).catch(() => [])) list.push(item)
+    for (const item of await listTuna(http, major, os, arch, imageType).catch(() => [])) list.push(item)
   }
-  list.push({ url: `${ADOPTIUM}/${major}/ga/${os}/${arch}/jre/hotspot/normal/eclipse` })
+  list.push({ url: `${ADOPTIUM}/${major}/ga/${os}/${arch}/${imageType}/hotspot/normal/eclipse` })
 
   // 只探测主源体积：备用源不参与进度分母，探它反而会拖慢"点下去就有反应"的那一下
   list[0].size = (await probeSize(http, list[0].url)) ?? undefined
   return list
 }
 
-async function listTuna(http: HttpClient, major: number, os: string, arch: string): Promise<ArchiveCandidate[]> {
-  const dir = `${TUNA}/${major}/jre/${arch}/${os}`
+async function listTuna(
+  http: HttpClient,
+  major: number,
+  os: string,
+  arch: string,
+  imageType: 'jre' | 'jdk'
+): Promise<ArchiveCandidate[]> {
+  const dir = `${TUNA}/${major}/${imageType}/${arch}/${os}`
   const html = await http.text(`${dir}/`, { timeoutMs: 12_000 })
   const files = [...html.matchAll(/href="([^"?]+\.(?:zip|tar\.gz))"/g)].map((m) => decodeURIComponent(m[1]))
   const ranked = files
@@ -231,4 +241,34 @@ export async function findManagedJava(paths: GamePaths, major: number): Promise<
 /** macOS 的 JRE 在 Contents/Home 下，与 Linux/Windows 的布局不同 */
 export function javaBinCandidates(dir: string): string[] {
   return [path.join(dir, 'bin', JAVA_BIN), path.join(dir, 'Contents', 'Home', 'bin', JAVA_BIN)]
+}
+
+/**
+ * 找受管 JDK（有 javac 的那种）。与 findManagedJava 的区别：
+ * 普通运行时目录里只有 java，Gradle 编译必须用 javac，所以要单独校验。
+ */
+export async function findManagedJdk(paths: GamePaths, major: number): Promise<string | null> {
+  let dirs: string[] = []
+  try {
+    dirs = await fs.readdir(paths.runtimes)
+  } catch {
+    return null
+  }
+  const want = new RegExp(`(^|[^0-9])${major}([^0-9]|$)`)
+  for (const dir of dirs) {
+    if (!want.test(dir)) continue
+    for (const rel of javaBinCandidates(dir)) {
+      const candidate = path.join(paths.runtimes, rel)
+      const javac = path.join(path.dirname(candidate), process.platform === 'win32' ? 'javac.exe' : 'javac')
+      try {
+        await fs.access(javac)
+        return path.dirname(candidate) === path.join(paths.runtimes, dir, 'bin')
+          ? path.join(paths.runtimes, dir)
+          : path.join(paths.runtimes, dir, 'Contents', 'Home')
+      } catch {
+        /* 这个目录是 JRE，继续找 */
+      }
+    }
+  }
+  return null
 }

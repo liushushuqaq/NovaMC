@@ -194,14 +194,20 @@ export class Installer {
     let artifact: LibraryPlan['artifact'] = null
     let native: LibraryPlan['native'] = null
 
-    if (lib.downloads?.artifact) {
+    // Forge 新版（1.21+ 的 52.x）官方 Maven 只发布 -universal，不再发布独立的
+    // -client / -server jar，但 installer 生成的 version.json 里仍残留这两个条目，
+    // 且它们的 url 是空字符串。空 url 根本没法下载，强行下只会报「下载失败」。
+    // 这里直接跳过：Forge 运行时只需要 universal，client/server 是历史遗留的空壳。
+    const isForgeEmptyClassifier = isForgeStubLibrary(lib)
+
+    if (lib.downloads?.artifact && !isForgeEmptyClassifier) {
       artifact = {
         path: lib.downloads.artifact.path ?? mavenPath,
         url: lib.downloads.artifact.url,
         sha1: lib.downloads.artifact.sha1,
         size: lib.downloads.artifact.size
       }
-    } else if (lib.name && path.extname(mavenPath) === '.jar') {
+    } else if (lib.name && path.extname(mavenPath) === '.jar' && !isForgeEmptyClassifier) {
       // Fabric 的 profile 只给 maven 根地址，没有 downloads 字段
       const base = (lib as Library & { url?: string }).url
       if (base) artifact = { path: mavenPath, url: `${base.replace(/\/$/, '')}/${mavenPath}` }
@@ -279,4 +285,18 @@ export function mavenPathOf(name: string): string {
   if (!group || !artifact || !version) throw fail('E_LIBRARY_NAME', `无法解析依赖坐标：${name}`)
   const file = classifier ? `${artifact}-${version}-${classifier}.jar` : `${artifact}-${version}.jar`
   return `${group.replace(/\./g, '/')}/${artifact}/${version}/${file}`
+}
+
+/**
+ * 判断是不是「Forge 已不再发布的空壳库」。
+ * Forge 新版 version.json 里 net.minecraftforge:forge 会同时带 :client 和 :universal 两个条目，
+ * 但 -client/-server 的 downloads.artifact.url 是空字符串（官方不发布了），
+ * 只有 -universal 是真实存在的。这类空壳条目不下载、也不校验。
+ */
+export function isForgeStubLibrary(lib: Library): boolean {
+  const [group, artifact, , classifier] = lib.name.split(':')
+  if (group !== 'net.minecraftforge' && group !== 'net.neoforged') return false
+  if (artifact !== 'forge' && artifact !== 'neoforge') return false
+  if (classifier !== 'client' && classifier !== 'server') return false
+  return !lib.downloads?.artifact?.url
 }

@@ -5,6 +5,8 @@ export interface RequestOptions {
   headers?: Record<string, string>
   method?: string
   body?: string | Uint8Array
+  /** 外部取消信号（与内部超时信号合并） */
+  signal?: AbortSignal
 }
 
 /**
@@ -17,6 +19,9 @@ export class HttpClient {
   async raw(url: string, opts: RequestOptions = {}): Promise<Response> {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 20_000)
+    // 外部 signal 触发时也中止本次请求
+    const onAbort = (): void => controller.abort()
+    opts.signal?.addEventListener('abort', onAbort)
     try {
       const res = await fetch(url, {
         method: opts.method ?? 'GET',
@@ -30,6 +35,7 @@ export class HttpClient {
       throw wrap('E_NETWORK', e, `请求失败 ${shorten(url)}`)
     } finally {
       clearTimeout(timeout)
+      opts.signal?.removeEventListener('abort', onAbort)
     }
   }
 

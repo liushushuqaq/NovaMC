@@ -385,6 +385,11 @@ export interface AppConfig {
   activeAccountId?: string
   /** 内网穿透访问令牌（按平台分别保存，仅存本地） */
   tunnelTokens?: Partial<Record<TunnelProviderId, string>>
+  /** 崩溃上报，默认关闭；endpoint 留空 = 只本地落盘不外发 */
+  crashReport?: {
+    enabled: boolean
+    endpoint: string
+  }
 }
 
 /* --------------------------------------------------------------- 系统信息 */
@@ -576,6 +581,8 @@ export interface NovaApi {
     /** 这个实例的 mods 里是否已有 Iris / OptiFine */
     status(id: string): Promise<Result<{ ready: boolean; found: string[] }>>
     install(id: string): Promise<Result<ShaderInstallResult>>
+    /** 手动选本地 jar 安装（OptiFine 官网不可达时用） */
+    installLocal(id: string): Promise<Result<{ canceled: boolean; fileName: string }>>
   }
   tunnel: {
     list(provider: TunnelProviderId, token: string): Promise<Result<TunnelSummary[]>>

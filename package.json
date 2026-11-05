@@ -1,6 +1,6 @@
 {
   "name": "novamc",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "NovaMC — a Minecraft launcher for Windows / macOS / Linux",
   "main": "./out/main/index.js",
   "author": "NovaMC",
@@ -11,10 +11,13 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "tsx --test tests/*.test.ts",
     "icon": "electron scripts/make-icon.js",
     "package:win": "npm run build && node scripts/pack.js win",
     "package:mac": "npm run build && node scripts/pack.js mac",
-    "package:linux": "npm run build && node scripts/pack.js linux"
+    "package:linux": "npm run build && node scripts/pack.js linux",
+    "sync:public": "node scripts/sync-public.js",
+    "sync:check": "node scripts/sync-public.js --check"
   },
   "dependencies": {
     "adm-zip": "^0.5.16"
@@ -30,6 +33,7 @@
     "electron-vite": "^2.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.3",
     "vite": "^5.4.11",
     "zustand": "^5.0.3"
