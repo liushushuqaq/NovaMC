@@ -622,16 +622,24 @@ function packFormatLabel(format: PackFormat): string {
 /**
  * 判断实例支持哪些资源包类别。
  * - 材质包（resourcepacks）：几乎都支持（原版 / Fabric / Forge / NeoForge / Quilt 都加载资源包）
- * - 光影包（shaderpacks）：需要 OptiFine 或 Iris，而这两个都能通过「一键安装光影支持」装上
+ * - 光影包（shaderpacks）：需要 Iris / Oculus / OptiFine，都能通过「一键安装光影支持」装上
  *
- * 现在所有加载器都有对应的光影方案（Fabric/NeoForge→Iris，Forge/原版→OptiFine），
- * 所以材质包 + 光影两个 Tab 全显示；后续若加了不支持光影的加载器再收紧。
+ * 现在所有加载器都有对应的光影方案（Fabric/NeoForge→Iris+Oculus 系，Forge 1.21+→Oculus，
+ * Forge 老版本→OptiFine），所以材质包 + 光影两个 Tab 全显示。
  */
 function packKinds(inst: InstanceConfig): Array<'shader' | 'resource'> {
   const kinds: Array<'shader' | 'resource'> = ['resource']
-  // 所有已知加载器都支持光影（OptiFine 或 Iris），保留未来扩展余地
   kinds.push('shader')
   return kinds
+}
+
+/**
+ * Forge 的光影模组名（给 UI 文案用）。
+ * 1.21+ 官方 OptiFine 已放弃 Forge 兼容，走 Modrinth 的 ForgeOculus；更早版本仍用 OptiFine。
+ */
+function forgeShaderLabel(gameVersion: string): string {
+  const m = /^1\.(\d+)/.exec(gameVersion)
+  return m && Number(m[1]) >= 21 ? 'Oculus' : 'OptiFine'
 }
 
 function CreateModal({
@@ -887,7 +895,7 @@ function CreateModal({
         <label>光影支持</label>
         {loader === 'vanilla' ? (
           <span style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.7 }}>
-            原版客户端不加载 mods 目录，光影包放进去也不会生效。想要光影请选 Fabric（Iris）或 Forge（OptiFine）。
+            原版客户端不加载 mods 目录，光影包放进去也不会生效。想要光影请选 Fabric（Iris）或 Forge（Oculus/OptiFine）。
           </span>
         ) : (
           <>
@@ -899,7 +907,7 @@ function CreateModal({
                 style={{ accentColor: 'var(--accent)' }}
               />
               <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
-                安装光影支持（{loader === 'forge' ? 'OptiFine' : 'Iris + Sodium'}）
+                安装光影支持（{loader === 'forge' ? forgeShaderLabel(gameVersion) : 'Iris + Sodium'}）
               </span>
             </label>
             <span style={{ fontSize: 10, color: 'var(--text-3)' }}>
@@ -1359,7 +1367,9 @@ function ResourcePacksModal({
                 <b>还没装光影模组？</b>
                 <span className="shader-sub">
                   {instance.loader.kind === 'forge'
-                    ? 'Forge 用 OptiFine：一键安装会放进 mods 目录。官网经常连不上，连不上时用「选择本地 jar」装自己下载好的文件。'
+                    ? forgeShaderLabel(instance.gameVersion) === 'Oculus'
+                      ? 'Forge 1.21+ 用 Oculus：一键安装会从 Modrinth 下好 ForgeOculus 放进 mods 目录，装完即可开光影。'
+                      : 'Forge 用 OptiFine：一键安装会放进 mods 目录。官网经常连不上，连不上时用「选择本地 jar」装自己下载好的文件。'
                     : 'Fabric / NeoForge 用 Iris：一键安装会把 Iris、Sodium 和依赖一起下好。'}
                 </span>
               </div>

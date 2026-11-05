@@ -12,15 +12,17 @@ const MODRINTH = 'https://api.modrinth.com/v2'
  * 光影支持自动安装。
  *
  * 用户要装光影，光有 shaderpacks 目录不够，还得有一个「光影模组」：
- *   - Fabric / NeoForge → Iris（+ Sodium 优化，Fabric 还需要 Fabric API）
- *   - Forge / 原版     → OptiFine
+ *   - Fabric / NeoForge  → Iris（+ Sodium 优化，Fabric 还需要 Fabric API）
+ *   - Forge 1.21+        → ForgeOculus（社区移植的 Oculus，Modrinth 上唯一支持 1.21 的 Forge 光影）
+ *   - Forge 1.20.x 及更早 → OptiFine（官方仍支持 Forge，且国内镜像/手动下载可兜底）
  *
- * 这里按实例加载器映射出一组要装的模组，从 Modrinth 递归解析 required 依赖
- * （Iris → Sodium → Fabric API），一次性下载到 mods 目录。
+ * 为什么 Forge 1.21+ 不用 OptiFine：
+ *   1. OptiFine 官方从 1.20.5 起不再提供 Forge 兼容，jar 丢进 mods 不会被 Forge 加载；
+ *   2. optifine.net 站点在部分网络下完全不可达（实测超时），抓取下载页必然失败；
+ *   3. Modrinth 上没有 Embeddium 的 1.21.1 版本，所以 Oculus 系是唯一可行解。
  *
  * OptiFine 单独处理：官网无 API，下载页需解析且时通时断，尽力而为，
- * 失败时明确提示用户手动安装（并说清 OptiFine 是「下载后作为 Forge 模组
- * 放进 mods 目录」这个正确姿势）。
+ * 失败时明确提示用户手动安装。
  */
 
 /** 一个待安装的模组 */
@@ -57,10 +59,19 @@ const PLAN: Record<string, string[]> = {
   fabric: ['fabric-api', 'sodium', 'iris'],
   // NeoForge：Iris 依赖 Sodium
   neoforge: ['sodium', 'iris'],
-  // Forge：OptiFine 的 jar 直接放进 mods 就能被 Forge 加载
-  forge: ['optifine']
+  // Forge：默认走 ForgeOculus（见下方 planFor 的版本分流）
+  forge: ['forgeoculus']
   // 原版（vanilla）不放进来：原版不加载 mods 目录，OptiFine 得装成独立版本，
   // 只丢个 jar 进去等于什么都没做，不能假装支持
+}
+
+/** MC 版本是否 ≥ 1.21（Forge 的光影方案从这里分流） */
+function isMcAtLeast121(gameVersion: string): boolean {
+  const m = /^(\d+)\.(\d+)/.exec(gameVersion)
+  if (!m) return false
+  const major = Number(m[1])
+  const minor = Number(m[2])
+  return major > 1 || (major === 1 && minor >= 21)
 }
 
 /** 加载器名 → Modrinth loader 字段 */
@@ -79,18 +90,26 @@ export class ShaderService {
   ) {}
 
   supports(instance: InstanceConfig): boolean {
-    return Boolean(PLAN[instance.loader.kind])
+    return Boolean(this.planFor(instance).length)
   }
 
   planFor(instance: InstanceConfig): string[] {
-    return PLAN[instance.loader.kind] ?? []
+    const kind = instance.loader.kind
+    // Forge 分流：1.21+ 走 ForgeOculus（Modrinth），更早版本仍用 OptiFine
+    if (kind === 'forge') {
+      return isMcAtLeast121(instance.gameVersion) ? ['forgeoculus'] : ['optifine']
+    }
+    return PLAN[kind] ?? []
   }
 
-  /** mods 目录里有没有能开光影的模组（Iris / OptiFine） */
+  /** mods 目录里有没有能开光影的模组（Iris / Oculus / OptiFine） */
   async status(instance: InstanceConfig): Promise<{ ready: boolean; found: string[] }> {
     const modsDir = path.join(this.paths.instanceGameDir(instance.slug), 'mods')
     const names = await fs.readdir(modsDir).catch(() => [] as string[])
-    const found = names.filter((n) => n.endsWith('.jar') && (/iris/i.test(n) || /optifine/i.test(n)))
+    // oculus 不能漏：Forge 1.21+ 装的 ForgeOculus 文件名是 oculus-mc*.jar
+    const found = names.filter(
+      (n) => n.endsWith('.jar') && (/iris/i.test(n) || /optifine/i.test(n) || /oculus/i.test(n))
+    )
     return { ready: found.length > 0, found }
   }
 
@@ -111,7 +130,7 @@ export class ShaderService {
     }
 
     const name = path.basename(jarPath)
-    if (!/iris|optifine|sodium|shader/i.test(name)) {
+    if (!/iris|optifine|sodium|oculus|shader/i.test(name)) {
       // 不硬性拒绝，但提醒用户可能选错了文件
       // 真正的校验在 status() 里体现（装完还是没识别到）
     }
@@ -135,7 +154,7 @@ export class ShaderService {
     instance: InstanceConfig,
     onProgress?: (label: string, done: number, total: number) => void
   ): Promise<ShaderInstallResult> {
-    const slugs = PLAN[instance.loader.kind]
+    const slugs = this.planFor(instance)
     if (!slugs?.length) {
       throw fail(
         'E_SHADER_UNSUPPORTED',
@@ -173,7 +192,13 @@ export class ShaderService {
 
       const pkg = await this.resolveModrinth(slug, instance.gameVersion, loader).catch(() => undefined)
       if (!pkg) {
-        failed.push({ slug, message: 'Modrinth 上没有匹配当前版本与加载器的版本' })
+        failed.push({
+          slug,
+          message:
+            slug === 'forgeoculus'
+              ? 'Modrinth 上没有当前版本可用的 ForgeOculus。可改用 NeoForge 实例（原生支持 Iris），或用「选择本地 jar」手动装'
+              : 'Modrinth 上没有匹配当前版本与加载器的版本'
+        })
         continue
       }
       resolved.push(pkg)
