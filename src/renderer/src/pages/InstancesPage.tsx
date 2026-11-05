@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp, invoke } from '../store'
 import { Icon } from '../icons'
-import { Modal, Empty, relTime } from '../components'
+import { Modal, Empty, relTime, ProgressBar, stageText, taskPercent } from '../components'
 import { coverStyle, loaderLabel } from './HomePage'
 import type {
   ImportProgress,
@@ -646,6 +646,16 @@ function CreateModal({
   const config = useApp((s) => s.config)
   const notify = useApp((s) => s.notify)
   const setPage = useApp((s) => s.setPage)
+  const progress = useApp((s) => s.progress)
+
+  // 创建过程中后端会依次推「安装 Fabric/Forge」「安装版本」等任务到全局进度，
+  // 取最新一条未完成的作为当前下载/加载状态展示（与导入整合包一致的真实进度）
+  const activeTask = useMemo(
+    () =>
+      progress.find((p) => p.stage !== 'done' && !p.error) ??
+      progress[progress.length - 1],
+    [progress]
+  )
 
   const [name, setName] = useState('')
   const [gameVersion, setGameVersion] = useState(versions[0] ?? '')
@@ -763,6 +773,19 @@ function CreateModal({
         </>
       }
     >
+      {busy && activeTask ? (
+        <div className="card" style={{ padding: 14, marginBottom: 14 }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>{activeTask.title}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+              {activeTask.error
+                ? activeTask.error.message
+                : `${stageText(activeTask.stage)} · ${activeTask.label || '准备中'} · ${Math.round(taskPercent(activeTask) * 100)}%`}
+            </span>
+          </div>
+          <ProgressBar value={activeTask.error ? 0 : taskPercent(activeTask)} tone={activeTask.error ? 'danger' : undefined} />
+        </div>
+      ) : null}
       <div className="field">
         <label>实例名称</label>
         <input
@@ -1336,13 +1359,34 @@ function ResourcePacksModal({
                 <b>还没装光影模组？</b>
                 <span className="shader-sub">
                   {instance.loader.kind === 'forge'
-                    ? 'Forge 用 OptiFine：一键安装会把 OptiFine 直接放进 mods 目录。官网有广告跳转页，可能要等一两分钟。'
+                    ? 'Forge 用 OptiFine：一键安装会放进 mods 目录。官网经常连不上，连不上时用「选择本地 jar」装自己下载好的文件。'
                     : 'Fabric / NeoForge 用 Iris：一键安装会把 Iris、Sodium 和依赖一起下好。'}
                 </span>
               </div>
-              <button className="btn sm primary" disabled={shaderInstalling} onClick={() => void installShader()}>
-                {shaderInstalling ? '安装中…' : '一键安装光影支持'}
-              </button>
+              <div style={{ display: 'flex', gap: 8, flex: 'none' }}>
+                <button className="btn sm primary" disabled={shaderInstalling} onClick={() => void installShader()}>
+                  {shaderInstalling ? '安装中…' : '一键安装光影支持'}
+                </button>
+                <button
+                  className="btn sm ghost"
+                  disabled={shaderInstalling}
+                  onClick={async () => {
+                    setShaderInstalling(true)
+                    const r = await window.nova.shader.installLocal(instance.id)
+                    setShaderInstalling(false)
+                    if (!r.ok) {
+                      notify('warn', '手动安装失败', r.message)
+                      return
+                    }
+                    if (r.data.canceled) return
+                    notify('success', '已放入 mods 目录', r.data.fileName)
+                    await refreshShaderStatus()
+                  }}
+                  title="OptiFine 官网连不上时，用自己下载好的 jar"
+                >
+                  选择本地 jar
+                </button>
+              </div>
             </div>
           )}
           {shaderMsg ? (

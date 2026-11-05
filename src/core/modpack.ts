@@ -7,6 +7,7 @@ import type { GamePaths } from './paths'
 import type { DownloadPool } from './download'
 import type { VersionService } from './version'
 import type { InstanceStore } from './instance'
+import type { ForgeService } from './forge'
 import type { InstanceConfig, ModpackSummary } from './types'
 import { fail, wrap } from './errors'
 
@@ -56,13 +57,21 @@ interface MrpackIndex {
   }[]
 }
 
+export interface ModrinthExtras {
+  forge?: ForgeService
+  /** 拿一个能跑指定 Java 主版本的 java 可执行文件 */
+  getJava?: (major: number) => Promise<string>
+}
+
 export class ModrinthService {
   constructor(
     private readonly http: HttpClient,
     private readonly pool: DownloadPool,
     private readonly paths: GamePaths,
     private readonly versions: VersionService,
-    private readonly instances: InstanceStore
+    private readonly instances: InstanceStore,
+    /** 可选：让整合包也能装 Forge / NeoForge */
+    private readonly extras: ModrinthExtras = {}
   ) {}
 
   async search(query: string, gameVersion?: string): Promise<ModpackSummary[]> {
@@ -124,22 +133,46 @@ export class ModrinthService {
     const minecraft = index.dependencies.minecraft
     if (!minecraft) throw fail('E_MODPACK_FORMAT', '整合包未声明游戏版本')
 
+    // 4) 装加载器：Fabric / Forge / NeoForge 都支持自动安装
     const fabricLoader = index.dependencies['fabric-loader']
-    if (!fabricLoader) {
-      const other = Object.keys(index.dependencies).find((k) => k !== 'minecraft')
-      throw fail('E_MODPACK_LOADER', other ? `暂不支持 ${other} 加载器的自动安装` : '该整合包未声明模组加载器')
-    }
+    const forgeVer = index.dependencies['forge']
+    const neoVer = index.dependencies['neoforge']
+    const quiltVer = index.dependencies['quilt-loader']
 
-    // 4) 装 Fabric
-    onProgress({ label: '安装 Fabric 加载器', done: 0, total: 1 })
-    const { versionId } = await this.versions.installFabric(minecraft, fabricLoader)
+    let versionId: string
+    let loader: { kind: 'fabric' | 'forge' | 'neoforge'; version: string }
+
+    if (fabricLoader) {
+      onProgress({ label: '安装 Fabric 加载器', done: 0, total: 1 })
+      versionId = (await this.versions.installFabric(minecraft, fabricLoader)).versionId
+      loader = { kind: 'fabric', version: fabricLoader }
+    } else if (forgeVer || neoVer) {
+      const family: 'forge' | 'neoforge' = neoVer ? 'neoforge' : 'forge'
+      const loaderVer = (neoVer ?? forgeVer) as string
+      if (!this.extras.forge || !this.extras.getJava) {
+        throw fail('E_MODPACK_LOADER', `无法自动安装 ${family}：组件未初始化`)
+      }
+      onProgress({ label: `安装 ${family === 'forge' ? 'Forge' : 'NeoForge'} 加载器`, done: 0, total: 1 })
+      const javaPath = await this.extras.getJava(17)
+      versionId = (
+        await this.extras.forge.install(family, loaderVer, {
+          javaPath,
+          onProgress: (label, done, total) => onProgress({ label, done, total })
+        })
+      ).versionId
+      loader = { kind: family, version: loaderVer }
+    } else if (quiltVer) {
+      throw fail('E_MODPACK_LOADER', 'Quilt 加载器暂不支持自动安装，请手动安装后导入这个整合包')
+    } else {
+      throw fail('E_MODPACK_LOADER', '该整合包未声明受支持的模组加载器')
+    }
 
     // 5) 建实例
     const instance = await this.instances.create({
       name: instanceName ?? index.name ?? target.name,
       gameVersion: minecraft,
       versionId,
-      loader: { kind: 'fabric', version: fabricLoader },
+      loader,
       memory: { minMb: 2048, maxMb: 8192 },
       window: { width: 1280, height: 720, fullscreen: false },
       source: { provider: 'modrinth', projectId, versionId: target.id, title: index.name }

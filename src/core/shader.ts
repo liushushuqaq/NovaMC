@@ -95,6 +95,39 @@ export class ShaderService {
   }
 
   /**
+   * 从本地 jar 安装（OptiFine 官网经常连不上时的兜底）。
+   * 用户自己下载好 jar 后选文件，这里复制进 mods 目录并完成校验。
+   */
+  async installLocal(instance: InstanceConfig, jarPath: string): Promise<{ fileName: string }> {
+    if (!/\.jar$/i.test(jarPath)) throw fail('E_SHADER_BAD_JAR', '请选择 .jar 文件')
+    let stat
+    try {
+      stat = await fs.stat(jarPath)
+    } catch {
+      throw fail('E_SHADER_BAD_JAR', '文件不存在或无法读取')
+    }
+    if (!stat.isFile() || stat.size < 1024) {
+      throw fail('E_SHADER_BAD_JAR', '这个 jar 看起来不完整（小于 1KB）')
+    }
+
+    const name = path.basename(jarPath)
+    if (!/iris|optifine|sodium|shader/i.test(name)) {
+      // 不硬性拒绝，但提醒用户可能选错了文件
+      // 真正的校验在 status() 里体现（装完还是没识别到）
+    }
+
+    const gameDir = this.paths.instanceGameDir(instance.slug)
+    await fs.mkdir(gameDir, { recursive: true })
+    await fs.mkdir(path.join(gameDir, 'shaderpacks'), { recursive: true })
+    const modsDir = path.join(gameDir, 'mods')
+    await fs.mkdir(modsDir, { recursive: true })
+
+    const dest = path.join(modsDir, await this.uniqueName(modsDir, name))
+    await fs.copyFile(jarPath, dest)
+    return { fileName: path.basename(dest) }
+  }
+
+  /**
    * 安装光影支持到实例的 mods 目录。
    * BFS 递归解析 required 依赖链，全部下载。
    */
@@ -255,7 +288,7 @@ export class ShaderService {
    */
   private async resolveOptifine(gameVersion: string): Promise<ShaderPackage | undefined> {
     try {
-      const html = await this.http.text('https://optifine.net/downloads', { timeoutMs: 15_000 })
+      const html = await this.http.text('https://optifine.net/downloads', { timeoutMs: 8_000 })
       // 正式版形如 OptiFine_1.21.1_HD_U_J1.jar；预览版带 preview_ 前缀，跳过
       const re = new RegExp(
         `(?:adloadx|downloadx)\\?f=(OptiFine_${escapeRe(gameVersion)}_HD_[A-Z]_[A-Z]\\d+)\\.jar`,
@@ -268,7 +301,7 @@ export class ShaderService {
       // adloadx 返回的是「5 秒后开始下载」的过渡页，真正的直链和 token 在里面
       const page = await this.http.text(
         `https://optifine.net/adloadx?f=${encodeURIComponent(fileName)}`,
-        { timeoutMs: 15_000 }
+        { timeoutMs: 8_000 }
       )
       const token = new RegExp(`downloadx\\?f=${escapeRe(fileName)}&x=([a-f0-9]+)`, 'i').exec(page)?.[1]
       const downloadUrl = token

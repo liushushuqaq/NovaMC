@@ -149,6 +149,11 @@ export class LaunchService {
     return this.currentInstanceId
   }
 
+  /** 最近 n 行日志（给崩溃上报 / 诊断用） */
+  lastLogLines(n = 60): string[] {
+    return this.ring.slice(-n)
+  }
+
   start(cmd: LaunchCommand, instanceId: string, events: LaunchEvents): { pid?: number } {
     if (this.child) throw fail('E_ALREADY_RUNNING', '已有游戏进程在运行')
 

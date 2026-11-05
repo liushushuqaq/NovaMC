@@ -19,6 +19,7 @@ import type {
 import { pickJava } from '../core/java'
 import { provisionJava } from '../core/javaProvision'
 import { buildLaunchCommand } from '../core/launch'
+import { recordCrash } from '../core/crashReport'
 import type { TunnelProviderId, TunnelSummary } from '../core/types'
 import { saveBackground, findWorldImage } from './background'
 
@@ -330,6 +331,23 @@ export function registerIpc(ctx: AppContext): void {
     })
   )
 
+  /** 手动选择本地 OptiFine / Iris jar（官网连不上时的兜底） */
+  ipcMain.handle('shader:installLocal', (_e, id: string) =>
+    guard(async () => {
+      const inst = await ctx.instances.get(id)
+      const picked = await dialog.showOpenDialog({
+        title: '选择下载好的 OptiFine / Iris jar',
+        filters: [{ name: 'Java 模组', extensions: ['jar'] }],
+        properties: ['openFile']
+      })
+      if (picked.canceled || !picked.filePaths[0]) {
+        return { canceled: true as const, fileName: '' }
+      }
+      const r = await ctx.shader.installLocal(inst, picked.filePaths[0])
+      return { canceled: false as const, fileName: r.fileName }
+    })
+  )
+
   ipcMain.handle('shader:install', (_e, id: string) =>
     guard(async () => {
       const inst = await ctx.instances.get(id)
@@ -484,6 +502,29 @@ export function registerIpc(ctx: AppContext): void {
         onExit: async ({ code, signal, crashLog }) => {
           broadcast('game:exit', { code, signal, crashLog })
           if (code === 0) progress({ ...emptyTask(instance.name), stage: 'done', label: '已退出' })
+          // 崩溃上报（默认关闭，未启用时 recordCrash 直接返回 null）
+          if (code !== 0) {
+            void (async () => {
+              try {
+                const cfg = await ctx.config.load()
+                await recordCrash({
+                  cfg,
+                  dataDir: ctx.paths.root,
+                  http: ctx.http,
+                  appVersion: app.getVersion(),
+                  report: {
+                    instance: instance.name,
+                    gameVersion: instance.gameVersion ?? '',
+                    exitCode: code,
+                    signal,
+                    summary: [crashLog ?? '', ...ctx.launcher.lastLogLines(60)].join('\n')
+                  }
+                })
+              } catch {
+                /* 上报永远不影响主流程 */
+              }
+            })()
+          }
         }
       })
 

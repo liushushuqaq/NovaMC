@@ -5,7 +5,7 @@ import { Icon, type IconName } from '../icons'
 import { ProgressBar, fmtBytes, fmtEta, stageText, taskPercent } from '../components'
 import type { AccentKey, AppConfig, StorageUsage, SystemInfo } from '@core/types'
 
-type SectionKey = 'appearance' | 'java' | 'memory' | 'window' | 'network' | 'storage' | 'about'
+type SectionKey = 'appearance' | 'java' | 'memory' | 'window' | 'network' | 'storage' | 'privacy' | 'about'
 
 interface SectionMeta {
   key: SectionKey
@@ -74,6 +74,15 @@ const SECTIONS: SectionMeta[] = [
     keywords: '目录 存储 空间 占用 磁盘 路径 日志 清理'
   },
   {
+    key: 'privacy',
+    label: '隐私与诊断',
+    icon: 'shield',
+    group: '其他',
+    title: '隐私与诊断',
+    desc: '崩溃上报与 AI 诊断默认全部关闭。开启前请看清哪些数据会离开你的电脑。',
+    keywords: '隐私 崩溃 上报 诊断 AI 日志 数据 上传 匿名'
+  },
+  {
     key: 'about',
     label: '关于与日志',
     icon: 'info',
@@ -93,6 +102,7 @@ const DEFAULTS: Record<SectionKey, Partial<AppConfig>> = {
   window: { defaultWindow: { width: 1280, height: 720, fullscreen: false } },
   network: { mirror: 'auto', concurrency: 8, downloadRetries: 3, downloadTimeoutSec: 30 },
   storage: {},
+  privacy: {},
   about: {}
 }
 
@@ -409,6 +419,7 @@ export default function SettingsPage(): ReactElement {
               onLogsCleared={() => void scan(true)}
             />
           ) : null}
+          {section === 'privacy' ? <PrivacySection config={config} patch={patch} /> : null}
           {section === 'about' ? (
             <AboutSection info={info} logs={logs} notify={notify} config={config} />
           ) : null}
@@ -1094,6 +1105,78 @@ function StorageSection({
 }
 
 /* ------------------------------------------------------------ 关于 */
+
+function PrivacySection({
+  config,
+  patch
+}: {
+  config: AppConfig
+  patch(p: Partial<AppConfig>): void
+}): ReactElement {
+  const crash = config.crashReport ?? { enabled: false, endpoint: '' }
+  const ai = config.aiDiagnosis ?? { enabled: false, baseUrl: '', apiKey: '', model: 'deepseek-chat' }
+
+  return (
+    <>
+      <Card title="崩溃上报" hint="默认关闭">
+        <div className="set-row">
+          <div className="set-row-label">
+            <b>记录游戏崩溃</b>
+            <span>游戏非正常退出时，把脱敏后的日志摘要写到本机「数据目录 / crash-reports」</span>
+          </div>
+          <Switch on={crash.enabled} onChange={(v) => patch({ crashReport: { ...crash, enabled: v } })} />
+        </div>
+        <div className="set-field">
+          <div className="field-head">
+            <span className="d">上报端点（可选）</span>
+            <span className="v">留空 = 只存本机</span>
+          </div>
+          <input
+            className="set-input"
+            value={crash.endpoint}
+            disabled={!crash.enabled}
+            placeholder="https://your-server.example.com/crash"
+            onChange={(e) => patch({ crashReport: { ...crash, endpoint: e.target.value } })}
+          />
+          <p className="hint">
+            留空时数据绝不离开本机。填写后会 POST 一份 JSON：本地绝对路径、用户名、API Key / Token 在写入前都会被抹掉。
+          </p>
+        </div>
+      </Card>
+
+      <Card title="AI 崩溃诊断" hint="默认关闭">
+        <div className="set-row">
+          <div className="set-row-label">
+            <b>允许 AI 分析崩溃日志</b>
+            <span>开发模式里点「AI 分析」时，把日志片段发给你自己配置的模型服务</span>
+          </div>
+          <Switch on={ai.enabled} onChange={(v) => patch({ aiDiagnosis: { ...ai, enabled: v } })} />
+        </div>
+        <div className="set-field">
+          <div className="field-head">
+            <span className="d">当前服务</span>
+            <span className="v">{ai.baseUrl || '未配置'}</span>
+          </div>
+          <p className="hint">
+            {ai.baseUrl
+              ? `模型 ${ai.model || '未设置'} · ${ai.apiKey ? 'Key 已保存（仅本机）' : '未填 Key'}`
+              : '在开发模式的控制台诊断面板里填写 Base URL / 模型 / API Key。未配置时只使用本地规则库。'}
+          </p>
+        </div>
+      </Card>
+
+      <Card title="隐私说明" tint>
+        <div className="set-privacy-note">
+          <p>
+            <b>默认全关。</b>不打开上面的开关，启动器不会收集、上传任何崩溃信息，也不会调用任何 AI 服务。
+          </p>
+          <p>所有配置存在本机 config.json；API Key 不写日志、不进崩溃报告、不显示在公开仓库。</p>
+          <p>上报端点由你自己填写，NovaMC 项目方不接收任何数据。</p>
+        </div>
+      </Card>
+    </>
+  )
+}
 
 function AboutSection({
   info,
